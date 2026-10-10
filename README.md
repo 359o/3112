@@ -284,3 +284,16 @@ TitanBot is released under the MIT License. See [LICENSE](LICENSE) for details.
 Thank you for choosing TitanBot for your Discord server! We're constantly working to improve and add new features based on community feedback.
 
 *Last updated: May 2026*
+
+## Marketplace (Pack Seller role)
+
+Titan Bot includes a separate video-based marketplace. Members must have a Discord role named exactly `Pack Seller` (case-insensitive) to manage listings. Buyers do not need that role.
+
+Commands:
+- `/purchase-setup create` — post a listing with title, uploaded video, channel, optional description/price, and optional ticket category.
+- `/purchase-setup list` — show your listings and IDs.
+- `/purchase-setup edit` — update a listing title, description, or price (`free` removes the price).
+- `/purchase-setup pause` / `/purchase-setup resume` — disable or re-enable its Purchase button.
+- `/purchase-setup delete` — remove the listing.
+
+Listings are persisted in PostgreSQL in `marketplace_listings`. The table is created automatically the first time the marketplace is used. Purchase buttons create private channels for the buyer and the listing seller. Ensure the bot has `Manage Channels`, `View Channels`, `Send Messages`, `Read Message History`, and `Attach Files` permissions, and ensure the bot can see the `Pack Seller` role. Register slash commands again after deploying this update.

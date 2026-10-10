@@ -474,6 +474,7 @@ export const botConfig = {
     community: true,
     fun: true,
     music: true,
+    marketplace: true,
   },
 };
 
@@ -548,6 +549,7 @@ const COMMAND_CATEGORY_FEATURE_MAP = {
   utility: "utility",
   verification: "verification",
   welcome: "welcome",
+  marketplace: "marketplace",
 };
 
 function normalizeCategoryKey(category) {

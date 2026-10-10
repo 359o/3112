@@ -18,6 +18,7 @@ export const CATEGORY_ICONS = {
   Search: '🔍',
   ServerStats: '📈',
   Ticket: '🎫',
+  Marketplace: '🛒',
   Tools: '🛠️',
   Utility: '🔧',
   Verification: '✅',

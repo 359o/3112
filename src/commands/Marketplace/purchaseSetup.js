@@ -61,6 +61,18 @@ export default {
         .setRequired(false)
         .setMaxLength(500)
     )
+    .addAttachmentOption((option) =>
+      option
+        .setName('product_file')
+        .setDescription('Upload the product file (.zip, .rar, etc.) to deliver to buyers')
+        .setRequired(false)
+    )
+    .addStringOption((option) =>
+      option
+        .setName('product_link')
+        .setDescription('Or paste a Google Drive / Mega download link for large files')
+        .setRequired(false)
+    )
     .addChannelOption((option) =>
       option
         .setName('channel')
@@ -89,6 +101,8 @@ export default {
     const title = interaction.options.getString('title').trim();
     const rawPrice = interaction.options.getString('price')?.trim();
     const description = interaction.options.getString('description')?.trim();
+    const productFile = interaction.options.getAttachment('product_file');
+    const productLink = interaction.options.getString('product_link')?.trim();
     const targetChannel =
       interaction.options.getChannel('channel') || interaction.channel;
 
@@ -146,7 +160,7 @@ export default {
         components: [purchaseRow],
       });
 
-      // Save listing to persistent database with the category ID
+      // Save listing to persistent database with product delivery data
       const listingData = {
         id: listingId,
         guildId: interaction.guildId,
@@ -160,6 +174,9 @@ export default {
         price: formattedPrice,
         description: description || null,
         videoUrl: videoAttachment.url,
+        productFileUrl: productFile?.url || null,
+        productFileName: productFile?.name || null,
+        productLink: productLink || null,
         status: 'active',
         createdAt: new Date().toISOString(),
       };
@@ -169,7 +186,7 @@ export default {
       logger.info(`Posted marketplace listing ${listingId} in #${targetChannel.name} by ${interaction.user.tag}`);
 
       return await interaction.editReply({
-        content: `✅ Successfully created your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})`,
+        content: `✅ Successfully created your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})\n📦 **Product Delivery:** ${productFile ? `File (${productFile.name}) attached` : productLink ? `Link configured` : 'Manual delivery in ticket'}`,
       });
     } catch (error) {
       logger.error('Failed to post marketplace listing message:', error);

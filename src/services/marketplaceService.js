@@ -162,9 +162,13 @@ export async function createPurchaseTicket(guild, buyerMember, listing) {
 
     const guildConfig = await getGuildConfig(guild.client, guild.id);
     
-    // Find or determine category for purchase tickets
-    let parentCategory = null;
-    if (guildConfig?.ticketCategoryId) {
+    // Automatically route to the "pack seller ticket" category
+    const PACK_SELLER_TICKET_CATEGORY_ID = '1558316273350221944';
+    let parentCategory =
+      guild.channels.cache.get(PACK_SELLER_TICKET_CATEGORY_ID) ||
+      (await guild.channels.fetch(PACK_SELLER_TICKET_CATEGORY_ID).catch(() => null));
+
+    if (!parentCategory && guildConfig?.ticketCategoryId) {
       parentCategory = guild.channels.cache.get(guildConfig.ticketCategoryId);
     }
 
@@ -233,7 +237,7 @@ export async function createPurchaseTicket(guild, buyerMember, listing) {
     const ticketChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
-      parent: parentCategory?.id || null,
+      parent: parentCategory?.id || PACK_SELLER_TICKET_CATEGORY_ID,
       permissionOverwrites,
       topic: `Purchase Inquiry | Product: ${listing.title} | Buyer: ${buyerMember.user.tag} (${buyerMember.id}) | Seller: <@${listing.sellerId}>`,
     });
@@ -253,7 +257,13 @@ export async function createPurchaseTicket(guild, buyerMember, listing) {
       ],
     });
 
+    // Control buttons: Hand Over and Close Ticket
     const controlRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`purchase_ticket_handover:${ticketChannel.id}`)
+        .setLabel('Hand Over')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📦'),
       new ButtonBuilder()
         .setCustomId(`purchase_ticket_close:${ticketChannel.id}`)
         .setLabel('Close Ticket')
@@ -282,7 +292,7 @@ export async function createPurchaseTicket(guild, buyerMember, listing) {
     await setInDb(getPurchaseTicketKey(guild.id, ticketChannel.id), ticketData);
     await setInDb(getBuyerActiveTicketKey(guild.id, buyerMember.id, listing.id), ticketChannel.id);
 
-    logger.info(`Created purchase ticket channel ${ticketChannel.id} for listing ${listing.id}`);
+    logger.info(`Created purchase ticket channel ${ticketChannel.id} in category ${PACK_SELLER_TICKET_CATEGORY_ID}`);
     return {
       success: true,
       channel: ticketChannel,
@@ -313,7 +323,8 @@ export async function closePurchaseTicket(interaction, channelId) {
     // Permission check: buyer, seller, pack seller, or administrator can close
     const isBuyer = ticketData?.buyerId === interaction.user.id;
     const isSeller = ticketData?.sellerId === interaction.user.id;
-    const hasAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+    const hasAdmin =
+      interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
       interaction.member.permissions.has(PermissionFlagsBits.ManageChannels);
     const hasPackSeller = isPackSeller(interaction.member);
 
@@ -339,5 +350,18 @@ export async function closePurchaseTicket(interaction, channelId) {
   } catch (error) {
     logger.error('Error closing purchase ticket:', error);
     return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Retrieve purchase ticket data by channelId.
+ */
+export async function getPurchaseTicketData(guildId, channelId) {
+  try {
+    const key = getPurchaseTicketKey(guildId, channelId);
+    return await getFromDb(key, null);
+  } catch (error) {
+    logger.error('Error retrieving purchase ticket data:', error);
+    return null;
   }
 }

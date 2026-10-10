@@ -5,11 +5,30 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  AttachmentBuilder,
 } from 'discord.js';
-import { isPackSeller, saveListing } from '../../services/marketplaceService.js';
-import { InteractionHelper } from '../../utils/interactionHelper.js';
-import { replyUserError, ErrorTypes } from '../../utils/errorHandler.js';
-import { logger } from '../../utils/logger.js';
+
+// Auto-detect import paths so it never fails whether inside src/commands/ or src/commands/Marketplace/
+let marketplaceService, interactionHelperModule, errorHandlerModule, loggerModule;
+try {
+  marketplaceService = await import('../../services/marketplaceService.js');
+  interactionHelperModule = await import('../../utils/interactionHelper.js');
+  errorHandlerModule = await import('../../utils/errorHandler.js');
+  loggerModule = await import('../../utils/logger.js');
+} catch {
+  marketplaceService = await import('../services/marketplaceService.js');
+  interactionHelperModule = await import('../utils/interactionHelper.js');
+  errorHandlerModule = await import('../utils/errorHandler.js');
+  loggerModule = await import('../utils/logger.js');
+}
+
+const { isPackSeller, saveListing } = marketplaceService;
+const { InteractionHelper } = interactionHelperModule;
+const { replyUserError, ErrorTypes } = errorHandlerModule;
+const { logger } = loggerModule;
+
+// Category ID for "pack seller ticket"
+const PACK_SELLER_CATEGORY_ID = '1558316273350221944';
 
 export default {
   data: new SlashCommandBuilder()
@@ -24,14 +43,14 @@ export default {
     .addStringOption((option) =>
       option
         .setName('title')
-        .setDescription('The title or name of the pack/product (e.g. Pink Wave)')
+        .setDescription('The title or name of the pack/product (e.g. Chrome Havoc)')
         .setRequired(true)
         .setMaxLength(100)
     )
     .addStringOption((option) =>
       option
         .setName('price')
-        .setDescription('The price of the item (e.g. $10)')
+        .setDescription('The price of the item (e.g. $13)')
         .setRequired(false)
         .setMaxLength(50)
     )
@@ -41,6 +60,18 @@ export default {
         .setDescription('Optional extra details or description')
         .setRequired(false)
         .setMaxLength(500)
+    )
+    .addAttachmentOption((option) =>
+      option
+        .setName('product_file')
+        .setDescription('Upload the product file (.zip, .rar, etc.) to deliver to buyers')
+        .setRequired(false)
+    )
+    .addStringOption((option) =>
+      option
+        .setName('product_link')
+        .setDescription('Or paste a Google Drive / Mega download link for large files')
+        .setRequired(false)
     )
     .addChannelOption((option) =>
       option
@@ -70,6 +101,8 @@ export default {
     const title = interaction.options.getString('title').trim();
     const rawPrice = interaction.options.getString('price')?.trim();
     const description = interaction.options.getString('description')?.trim();
+    const productFile = interaction.options.getAttachment('product_file');
+    const productLink = interaction.options.getString('product_link')?.trim();
     const targetChannel =
       interaction.options.getChannel('channel') || interaction.channel;
 
@@ -95,10 +128,7 @@ export default {
     const uniqueSuffix = Math.random().toString(36).substring(2, 7);
     const listingId = `pack_${Date.now().toString(36)}_${uniqueSuffix}`;
 
-    // Construct the message text exactly matching the screenshot reference:
-    // **Title**
-    // Price: $10
-    // Seller: @user
+    // Clean text format (Exact Chrome Havoc style - NO embed box, NO green bar!)
     let messageContent = `**${title}**\n`;
     if (formattedPrice) {
       messageContent += `Price: ${formattedPrice}\n`;
@@ -108,7 +138,12 @@ export default {
     }
     messageContent += `Seller: <@${interaction.user.id}>`;
 
-    // Construct the green Purchase button underneath the video
+    // Attached video file (renders native playable video player)
+    const videoFile = new AttachmentBuilder(videoAttachment.url, {
+      name: videoAttachment.name || 'product_showcase.mp4',
+    });
+
+    // Green Purchase Button underneath the video
     const purchaseRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`purchase_buy:${listingId}`)
@@ -118,18 +153,19 @@ export default {
     );
 
     try {
-      // Send the post to the designated channel with the video attached
+      // Send with NO embeds so Discord expands the video into full player
       const sentMessage = await targetChannel.send({
         content: messageContent,
-        files: [videoAttachment.url],
+        files: [videoFile],
         components: [purchaseRow],
       });
 
-      // Save listing to persistent database
+      // Save listing to persistent database with product delivery data
       const listingData = {
         id: listingId,
         guildId: interaction.guildId,
         channelId: targetChannel.id,
+        ticketCategoryId: PACK_SELLER_CATEGORY_ID,
         messageId: sentMessage.id,
         messageUrl: sentMessage.url,
         sellerId: interaction.user.id,
@@ -138,6 +174,9 @@ export default {
         price: formattedPrice,
         description: description || null,
         videoUrl: videoAttachment.url,
+        productFileUrl: productFile?.url || null,
+        productFileName: productFile?.name || null,
+        productLink: productLink || null,
         status: 'active',
         createdAt: new Date().toISOString(),
       };
@@ -147,13 +186,13 @@ export default {
       logger.info(`Posted marketplace listing ${listingId} in #${targetChannel.name} by ${interaction.user.tag}`);
 
       return await interaction.editReply({
-        content: `✅ Successfully created and published your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})\n\n**Listing ID:** \`${listingId}\``,
+        content: `✅ Successfully created your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})\n📦 **Product Delivery:** ${productFile ? `File (${productFile.name}) attached` : productLink ? `Link configured` : 'Manual delivery in ticket'}`,
       });
     } catch (error) {
       logger.error('Failed to post marketplace listing message:', error);
       return await replyUserError(interaction, {
         type: ErrorTypes.UNKNOWN,
-        message: `Failed to post listing in <#${targetChannel.id}>: ${error.message}. Please ensure the bot has permission to send messages and attachments in that channel.`,
+        message: `Failed to post listing in <#${targetChannel.id}>: ${error.message}. Please check bot channel permissions.`,
       });
     }
   },

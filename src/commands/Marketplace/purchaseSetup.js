@@ -5,6 +5,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  AttachmentBuilder,
 } from 'discord.js';
 import { isPackSeller, saveListing } from '../../services/marketplaceService.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
@@ -24,14 +25,14 @@ export default {
     .addStringOption((option) =>
       option
         .setName('title')
-        .setDescription('The title or name of the pack/product (e.g. Pink Wave)')
+        .setDescription('The title or name of the pack/product (e.g. Chrome Havoc)')
         .setRequired(true)
         .setMaxLength(100)
     )
     .addStringOption((option) =>
       option
         .setName('price')
-        .setDescription('The price of the item (e.g. $10)')
+        .setDescription('The price of the item (e.g. $13)')
         .setRequired(false)
         .setMaxLength(50)
     )
@@ -95,10 +96,7 @@ export default {
     const uniqueSuffix = Math.random().toString(36).substring(2, 7);
     const listingId = `pack_${Date.now().toString(36)}_${uniqueSuffix}`;
 
-    // Construct the message text exactly matching the screenshot reference:
-    // **Title**
-    // Price: $10
-    // Seller: @user
+    // Clean text format (Exact Chrome Havoc style - NO embed box, NO green bar!)
     let messageContent = `**${title}**\n`;
     if (formattedPrice) {
       messageContent += `Price: ${formattedPrice}\n`;
@@ -108,7 +106,12 @@ export default {
     }
     messageContent += `Seller: <@${interaction.user.id}>`;
 
-    // Construct the green Purchase button underneath the video
+    // Attached video file (renders native playable video player)
+    const videoFile = new AttachmentBuilder(videoAttachment.url, {
+      name: videoAttachment.name || 'product_showcase.mp4',
+    });
+
+    // Green Purchase Button underneath the video
     const purchaseRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`purchase_buy:${listingId}`)
@@ -118,10 +121,10 @@ export default {
     );
 
     try {
-      // Send the post to the designated channel with the video attached
+      // Send with NO embeds so Discord expands the video into full player
       const sentMessage = await targetChannel.send({
         content: messageContent,
-        files: [videoAttachment.url],
+        files: [videoFile],
         components: [purchaseRow],
       });
 
@@ -147,13 +150,13 @@ export default {
       logger.info(`Posted marketplace listing ${listingId} in #${targetChannel.name} by ${interaction.user.tag}`);
 
       return await interaction.editReply({
-        content: `✅ Successfully created and published your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})\n\n**Listing ID:** \`${listingId}\``,
+        content: `✅ Successfully created your listing for **${title}** in <#${targetChannel.id}>!\n🔗 [Jump to Listing](${sentMessage.url})`,
       });
     } catch (error) {
       logger.error('Failed to post marketplace listing message:', error);
       return await replyUserError(interaction, {
         type: ErrorTypes.UNKNOWN,
-        message: `Failed to post listing in <#${targetChannel.id}>: ${error.message}. Please ensure the bot has permission to send messages and attachments in that channel.`,
+        message: `Failed to post listing in <#${targetChannel.id}>: ${error.message}. Please check bot channel permissions.`,
       });
     }
   },
